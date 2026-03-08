@@ -84,7 +84,22 @@ ${projectContext}
 - Be concise and actionable
 - Use the project's language (${config?.project.language || "en"})
 - Reference specific rules by number (#0, #5, etc.)
-- Suggest concrete next steps`;
+- Suggest concrete next steps
+
+## Structured Actions
+When the user asks you to create, toggle, or modify something, include a JSON action block at the end of your response so the UI can offer an "Apply" button. Use this format:
+
+\`\`\`cdd-action
+{"action": "createSkill", "params": {"name": "component", "module": "frontend", "description": "React component creation patterns"}}
+\`\`\`
+
+Available actions:
+- \`createSkill\` — params: name, module, description
+- \`createHook\` — params: name, module, type (PreToolUse|PostToolUse|UserPromptSubmit|Stop)
+- \`toggleRule\` — params: ruleId
+- \`addModule\` — params: name, role, stack (optional)
+
+Only include ONE action block per response. If the request doesn't map to an action, don't include a block.`;
   }
 
   async sendMessage(

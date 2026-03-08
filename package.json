@@ -2,7 +2,7 @@
   "name": "cdd-for-claude-code",
   "displayName": "CDD for Claude Code — Copilot Driven Dev",
   "description": "Visual explorer and AI agent for CDD (Copilot-Driven Development) methodology. Manage modules, skills, rules, and stacks for Claude Code projects.",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "publisher": "danilorangelmg",
   "license": "MIT",
   "icon": "resources/cdd-icon.png",
@@ -42,8 +42,18 @@
     "views": {
       "cdd-explorer": [
         {
-          "id": "cddModules",
-          "name": "Modules & Skills"
+          "id": "cddExplorer",
+          "name": "Explorer"
+        },
+        {
+          "id": "cddClaudeMd",
+          "name": "CLAUDE.md",
+          "type": "webview"
+        },
+        {
+          "id": "cddChat",
+          "name": "Chat",
+          "type": "webview"
         }
       ]
     },
@@ -90,25 +100,55 @@
         "command": "cdd.refreshTree",
         "title": "Refresh",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "cdd.toggleRule",
+        "title": "CDD: Toggle Rule",
+        "icon": "$(check)"
+      },
+      {
+        "command": "cdd.createSkill",
+        "title": "CDD: Create Skill",
+        "icon": "$(add)"
+      },
+      {
+        "command": "cdd.createHook",
+        "title": "CDD: Create Hook",
+        "icon": "$(add)"
       }
     ],
     "menus": {
       "view/title": [
         {
           "command": "cdd.addModule",
-          "when": "view == cddModules",
+          "when": "view == cddExplorer",
           "group": "navigation"
         },
         {
           "command": "cdd.refreshTree",
-          "when": "view == cddModules",
+          "when": "view == cddExplorer",
           "group": "navigation"
         }
       ],
       "view/item/context": [
         {
           "command": "cdd.addStack",
-          "when": "view == cddModules && viewItem == module",
+          "when": "view == cddExplorer && viewItem == module",
+          "group": "inline"
+        },
+        {
+          "command": "cdd.toggleRule",
+          "when": "view == cddExplorer && viewItem == rule",
+          "group": "inline"
+        },
+        {
+          "command": "cdd.createSkill",
+          "when": "view == cddExplorer && viewItem == skillsCategory",
+          "group": "inline"
+        },
+        {
+          "command": "cdd.createHook",
+          "when": "view == cddExplorer && viewItem == hooksCategory",
           "group": "inline"
         }
       ]

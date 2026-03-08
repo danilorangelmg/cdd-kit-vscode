@@ -8,12 +8,11 @@ type NodeType =
   | "module"
   | "category"
   | "skill"
+  | "skillFile"
   | "rule"
   | "agent"
-  | "methodology"
-  | "preset"
-  | "ruleItem"
-  | "hookItem"
+  | "hook"
+  | "claudeMd"
   | "doctor";
 
 interface CddNode {
@@ -25,6 +24,7 @@ interface CddNode {
   children?: CddNode[];
   contextValue?: string;
   iconId?: string;
+  ruleId?: string;
 }
 
 const ROLE_ICONS: Record<string, string> = {
@@ -81,8 +81,8 @@ export class CddTreeProvider implements vscode.TreeDataProvider<CddNode> {
       };
     }
 
-    // Auto-expand project and methodology
-    if (element.type === "project" || element.type === "methodology") {
+    // Auto-expand project
+    if (element.type === "project") {
       item.collapsibleState = vscode.TreeItemCollapsibleState.Expanded;
     }
 
@@ -90,9 +90,7 @@ export class CddTreeProvider implements vscode.TreeDataProvider<CddNode> {
   }
 
   getChildren(element?: CddNode): CddNode[] {
-    if (!element) {
-      return this.rootNodes;
-    }
+    if (!element) return this.rootNodes;
     return element.children || [];
   }
 
@@ -117,8 +115,7 @@ export class CddTreeProvider implements vscode.TreeDataProvider<CddNode> {
       this.buildModuleNode(config, mod, workspaceRoot)
     );
 
-    const methodologyNode = this.buildMethodologyNode(config);
-    const doctorNode = this.buildDoctorNode(config, workspaceRoot);
+    const doctorNode = this.buildDoctorNode(workspaceRoot);
 
     this.rootNodes = [
       {
@@ -128,7 +125,6 @@ export class CddTreeProvider implements vscode.TreeDataProvider<CddNode> {
         iconId: "layers",
         children: moduleNodes,
       },
-      methodologyNode,
       doctorNode,
     ];
   }
@@ -138,13 +134,67 @@ export class CddTreeProvider implements vscode.TreeDataProvider<CddNode> {
     mod: { name: string; role: string; directory: string; stack?: string },
     workspaceRoot: string
   ): CddNode {
-    const moduleDir = path.join(workspaceRoot, mod.directory);
     const claudeDir = path.join(workspaceRoot, ".claude");
+    const moduleMdPath = path.join(workspaceRoot, mod.directory, "CLAUDE.md");
 
     const stackLabel = mod.stack ? ` [${mod.stack}]` : "";
-    const skills = this.findSkills(config, mod, claudeDir);
-    const rules = this.findRules(claudeDir);
-    const agents = this.findAgents(mod.name, claudeDir);
+    const skills = this.findSkills(claudeDir);
+    const rules = this.buildRuleNodes(config);
+    const agents = this.findAgents(claudeDir);
+    const hooks = this.findHooks(claudeDir);
+
+    const children: CddNode[] = [];
+
+    // CLAUDE.md as first item
+    if (fs.existsSync(moduleMdPath)) {
+      children.push({
+        type: "claudeMd",
+        label: "CLAUDE.md",
+        iconId: "file-text",
+        filePath: moduleMdPath,
+        contextValue: "claudeMdFile",
+      });
+    }
+
+    // Skills
+    children.push({
+      type: "category",
+      label: "Skills",
+      description: `${skills.length}`,
+      iconId: "symbol-method",
+      contextValue: "skillsCategory",
+      children: skills,
+    });
+
+    // Rules
+    children.push({
+      type: "category",
+      label: "Rules",
+      description: `${rules.filter((r) => r.iconId === "pass-filled").length} active`,
+      iconId: "law",
+      children: rules,
+    });
+
+    // Hooks
+    children.push({
+      type: "category",
+      label: "Hooks",
+      description: `${hooks.length}`,
+      iconId: "git-commit",
+      contextValue: "hooksCategory",
+      children: hooks,
+    });
+
+    // Agents
+    if (agents.length > 0) {
+      children.push({
+        type: "category",
+        label: "Agents",
+        description: `${agents.length}`,
+        iconId: "hubot",
+        children: agents,
+      });
+    }
 
     return {
       type: "module",
@@ -152,37 +202,11 @@ export class CddTreeProvider implements vscode.TreeDataProvider<CddNode> {
       description: mod.role,
       iconId: ROLE_ICONS[mod.role] || "package",
       contextValue: "module",
-      children: [
-        {
-          type: "category",
-          label: "Skills",
-          description: `${skills.length}`,
-          iconId: "symbol-method",
-          children: skills,
-        },
-        {
-          type: "category",
-          label: "Rules",
-          description: `${rules.length} active`,
-          iconId: "law",
-          children: rules,
-        },
-        {
-          type: "category",
-          label: "Agents",
-          description: `${agents.length}`,
-          iconId: "hubot",
-          children: agents,
-        },
-      ],
+      children,
     };
   }
 
-  private findSkills(
-    config: CddConfig,
-    mod: { name: string; role: string; stack?: string },
-    claudeDir: string
-  ): CddNode[] {
+  private findSkills(claudeDir: string): CddNode[] {
     const skillsDir = path.join(claudeDir, "skills");
     if (!fs.existsSync(skillsDir)) return [];
 
@@ -201,7 +225,7 @@ export class CddTreeProvider implements vscode.TreeDataProvider<CddNode> {
           const sfPath = path.join(skillDir, sf);
           if (fs.existsSync(sfPath)) {
             supportingFiles.push({
-              type: "skill",
+              type: "skillFile",
               label: sf,
               iconId: "file",
               filePath: sfPath,
@@ -209,13 +233,26 @@ export class CddTreeProvider implements vscode.TreeDataProvider<CddNode> {
           }
         }
 
+        // Show SKILL.md + supporting files as children
+        const children: CddNode[] = [
+          {
+            type: "skillFile",
+            label: "SKILL.md",
+            iconId: "file-text",
+            filePath: skillMdPath,
+          },
+          ...supportingFiles,
+        ];
+
         skills.push({
           type: "skill",
           label: entry.name,
-          description: supportingFiles.length > 0 ? `+${supportingFiles.length} files` : undefined,
-          iconId: "symbol-method",
-          filePath: skillMdPath,
-          children: supportingFiles.length > 0 ? supportingFiles : undefined,
+          description:
+            supportingFiles.length > 0
+              ? `+${supportingFiles.length} files`
+              : undefined,
+          iconId: "zap",
+          children,
         });
       }
     } catch {
@@ -225,37 +262,45 @@ export class CddTreeProvider implements vscode.TreeDataProvider<CddNode> {
     return skills;
   }
 
-  private findRules(claudeDir: string): CddNode[] {
-    const rulesDir = path.join(claudeDir, "rules");
-    if (!fs.existsSync(rulesDir)) return [];
-
-    const rules: CddNode[] = [];
-    try {
-      const scanDir = (dir: string) => {
-        const entries = fs.readdirSync(dir, { withFileTypes: true });
-        for (const entry of entries) {
-          const fullPath = path.join(dir, entry.name);
-          if (entry.isDirectory()) {
-            scanDir(fullPath);
-          } else if (entry.name.endsWith(".md")) {
-            rules.push({
-              type: "rule",
-              label: entry.name.replace(".md", ""),
-              iconId: "law",
-              filePath: fullPath,
-            });
-          }
-        }
-      };
-      scanDir(rulesDir);
-    } catch {
-      // rules dir not readable
-    }
-
-    return rules;
+  private buildRuleNodes(config: CddConfig): CddNode[] {
+    return Object.entries(config.methodology.rules).map(
+      ([ruleId, isActive]) => ({
+        type: "rule" as NodeType,
+        label: `${ruleId}`,
+        description: isActive ? "enabled" : "disabled",
+        iconId: isActive ? "pass-filled" : "circle-large-outline",
+        contextValue: "rule",
+        ruleId,
+        tooltip: `Click toggle button to ${isActive ? "disable" : "enable"}`,
+      })
+    );
   }
 
-  private findAgents(moduleName: string, claudeDir: string): CddNode[] {
+  private findHooks(claudeDir: string): CddNode[] {
+    const hooksDir = path.join(claudeDir, "hooks");
+    if (!fs.existsSync(hooksDir)) return [];
+
+    const hooks: CddNode[] = [];
+    try {
+      const entries = fs.readdirSync(hooksDir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (entry.isDirectory()) continue;
+        const fullPath = path.join(hooksDir, entry.name);
+        hooks.push({
+          type: "hook",
+          label: entry.name,
+          iconId: "git-commit",
+          filePath: fullPath,
+        });
+      }
+    } catch {
+      // hooks dir not readable
+    }
+
+    return hooks;
+  }
+
+  private findAgents(claudeDir: string): CddNode[] {
     const agentsDir = path.join(claudeDir, "agents");
     if (!fs.existsSync(agentsDir)) return [];
 
@@ -279,36 +324,12 @@ export class CddTreeProvider implements vscode.TreeDataProvider<CddNode> {
     return agents;
   }
 
-  private buildMethodologyNode(config: CddConfig): CddNode {
-    const activeRules = Object.entries(config.methodology.rules)
-      .filter(([, v]) => v)
-      .map(([k]) => `#${k}`);
-
-    return {
-      type: "methodology",
-      label: "Methodology",
-      iconId: "gear",
-      children: [
-        {
-          type: "preset",
-          label: `Preset: ${config.methodology.preset}`,
-          iconId: "symbol-enum",
-        },
-        {
-          type: "ruleItem",
-          label: `Rules: ${activeRules.join(", ") || "none"}`,
-          iconId: "law",
-        },
-      ],
-    };
-  }
-
-  private buildDoctorNode(config: CddConfig, workspaceRoot: string): CddNode {
+  private buildDoctorNode(workspaceRoot: string): CddNode {
     const claudeDir = path.join(workspaceRoot, ".claude");
     const hasClaudeDir = fs.existsSync(claudeDir);
     const hasCddJson = fs.existsSync(path.join(workspaceRoot, "cdd.json"));
 
-    const status = hasClaudeDir && hasCddJson ? "OK" : "Issues found";
+    const status = hasClaudeDir && hasCddJson ? "All passed" : "Issues found";
     const icon = hasClaudeDir && hasCddJson ? "pass" : "warning";
 
     return {

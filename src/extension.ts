@@ -2,6 +2,9 @@ import * as vscode from "vscode";
 import { ConfigService } from "./services/configService";
 import { CddTreeProvider } from "./providers/CddTreeProvider";
 import { CddAgentService } from "./services/cddAgentService";
+import { CddChatViewProvider } from "./providers/CddChatViewProvider";
+import { CddClaudeMdViewProvider } from "./providers/CddClaudeMdViewProvider";
+import { ClaudeMdService } from "./services/claudeMdService";
 import {
   AnthropicAuthProvider,
   getApiKey,
@@ -11,9 +14,12 @@ import { addModuleCommand } from "./commands/addModule";
 import { addStackCommand } from "./commands/addStack";
 import { runDoctorCommand } from "./commands/runDoctor";
 import { regenerateCommand } from "./commands/regenerate";
-import { askAgentCommand } from "./commands/askAgent";
+import { toggleRuleCommand } from "./commands/toggleRule";
+import { createSkillCommand } from "./commands/createSkill";
+import { createHookCommand } from "./commands/createHook";
 
-let statusBarItem: vscode.StatusBarItem;
+let projectStatusBar: vscode.StatusBarItem;
+let connectionStatusBar: vscode.StatusBarItem;
 
 export async function activate(
   context: vscode.ExtensionContext
@@ -22,23 +28,54 @@ export async function activate(
   const configService = new ConfigService();
   const agentService = new CddAgentService();
   const authProvider = new AnthropicAuthProvider(context);
+  const claudeMdService = new ClaudeMdService(configService);
 
   // TreeView
   const treeProvider = new CddTreeProvider(configService);
-  const treeView = vscode.window.createTreeView("cddModules", {
+  const treeView = vscode.window.createTreeView("cddExplorer", {
     treeDataProvider: treeProvider,
     showCollapseAll: true,
   });
 
-  // Status bar
-  statusBarItem = vscode.window.createStatusBarItem(
+  // WebviewView providers
+  const chatViewProvider = new CddChatViewProvider(
+    context,
+    configService,
+    agentService,
+    treeProvider
+  );
+  const claudeMdViewProvider = new CddClaudeMdViewProvider(
+    configService,
+    claudeMdService
+  );
+
+  context.subscriptions.push(
+    vscode.window.registerWebviewViewProvider("cddChat", chatViewProvider),
+    vscode.window.registerWebviewViewProvider(
+      "cddClaudeMd",
+      claudeMdViewProvider
+    )
+  );
+
+  // Status bar — Project info
+  projectStatusBar = vscode.window.createStatusBarItem(
     vscode.StatusBarAlignment.Left,
     50
   );
-  updateStatusBar(configService, context);
-  configService.onDidChangeConfig(() =>
-    updateStatusBar(configService, context)
+  projectStatusBar.command = "cddExplorer.focus";
+
+  // Status bar — Connection status
+  connectionStatusBar = vscode.window.createStatusBarItem(
+    vscode.StatusBarAlignment.Left,
+    49
   );
+
+  updateProjectStatusBar(configService);
+  await updateConnectionStatusBar(context, agentService);
+
+  configService.onDidChangeConfig(() => {
+    updateProjectStatusBar(configService);
+  });
 
   // Register commands
   context.subscriptions.push(
@@ -58,7 +95,16 @@ export async function activate(
       regenerateCommand(configService, treeProvider)
     ),
     vscode.commands.registerCommand("cdd.askAgent", () =>
-      askAgentCommand(context, configService, agentService)
+      vscode.commands.executeCommand("cddChat.focus")
+    ),
+    vscode.commands.registerCommand("cdd.toggleRule", (item) =>
+      toggleRuleCommand(item, configService, treeProvider)
+    ),
+    vscode.commands.registerCommand("cdd.createSkill", () =>
+      createSkillCommand(configService, treeProvider)
+    ),
+    vscode.commands.registerCommand("cdd.createHook", () =>
+      createHookCommand(configService, treeProvider)
     ),
     vscode.commands.registerCommand("cdd.loginAnthropic", async () => {
       try {
@@ -69,7 +115,8 @@ export async function activate(
         );
         if (session) {
           await agentService.initialize(session.accessToken);
-          updateStatusBar(configService, context);
+          await updateConnectionStatusBar(context, agentService);
+          chatViewProvider.updateContent();
           vscode.window.showInformationMessage(
             "Anthropic API connected. CDD Agent ready."
           );
@@ -80,14 +127,16 @@ export async function activate(
     }),
     vscode.commands.registerCommand("cdd.logoutAnthropic", async () => {
       await authProvider.removeSession("anthropic-session");
-      updateStatusBar(configService, context);
+      await updateConnectionStatusBar(context, agentService);
+      chatViewProvider.updateContent();
       vscode.window.showInformationMessage("Anthropic API disconnected.");
     }),
     vscode.commands.registerCommand("cdd.refreshTree", () =>
       treeProvider.refresh()
     ),
     treeView,
-    statusBarItem,
+    projectStatusBar,
+    connectionStatusBar,
     configService,
     authProvider
   );
@@ -101,29 +150,66 @@ export async function activate(
       // Silent fail — agent will prompt for login when used
     }
   }
+
+  await updateConnectionStatusBar(context, agentService);
 }
 
-async function updateStatusBar(
-  configService: ConfigService,
-  context: vscode.ExtensionContext
-): Promise<void> {
+function updateProjectStatusBar(configService: ConfigService): void {
   const config = configService.getConfig();
-  const apiKey = await getApiKey(context);
 
   if (!config) {
-    statusBarItem.text = "$(layers) CDD: No project";
-    statusBarItem.tooltip = "Click to initialize a CDD project";
-    statusBarItem.command = "cdd.initProject";
+    projectStatusBar.text = "$(layers) CDD: No project";
+    projectStatusBar.tooltip = "Click to open CDD Explorer";
+    projectStatusBar.command = "cdd.initProject";
   } else {
     const moduleCount = config.modules.length;
     const preset = config.methodology.preset;
-    const agentStatus = apiKey ? "$(check)" : "$(circle-slash)";
-    statusBarItem.text = `$(layers) CDD: ${preset} | ${moduleCount}m ${agentStatus}`;
-    statusBarItem.tooltip = `CDD Project: ${config.project.name}\nPreset: ${preset}\nModules: ${moduleCount}\nAgent: ${apiKey ? "Connected" : "Not connected"}`;
-    statusBarItem.command = "cdd.askAgent";
+    projectStatusBar.text = `$(layers) CDD: ${preset} | ${moduleCount}m`;
+    projectStatusBar.tooltip = `CDD Project: ${config.project.name}\nPreset: ${preset}\nModules: ${moduleCount}`;
+    projectStatusBar.command = "cddExplorer.focus";
   }
 
-  statusBarItem.show();
+  projectStatusBar.show();
+}
+
+async function updateConnectionStatusBar(
+  context: vscode.ExtensionContext,
+  agentService: CddAgentService
+): Promise<void> {
+  const apiKey = await getApiKey(context);
+  const isConnected = !!apiKey && agentService.isReady();
+
+  const vscodeConfig = vscode.workspace.getConfiguration("cdd");
+  const modelId = vscodeConfig.get<string>(
+    "anthropic.model",
+    "claude-sonnet-4-6-20250414"
+  );
+
+  if (isConnected) {
+    const modelName = getModelDisplayName(modelId);
+    connectionStatusBar.text = `$(circle-filled) ${modelName}`;
+    connectionStatusBar.tooltip = `Connected to ${modelName}\nClick to disconnect`;
+    connectionStatusBar.color = new vscode.ThemeColor(
+      "testing.iconPassed"
+    );
+    connectionStatusBar.command = "cdd.logoutAnthropic";
+  } else {
+    connectionStatusBar.text = "$(circle-slash) Disconnected";
+    connectionStatusBar.tooltip = "Click to connect to Anthropic";
+    connectionStatusBar.color = new vscode.ThemeColor(
+      "testing.iconFailed"
+    );
+    connectionStatusBar.command = "cdd.loginAnthropic";
+  }
+
+  connectionStatusBar.show();
+}
+
+function getModelDisplayName(modelId: string): string {
+  if (modelId.includes("haiku")) return "Claude Haiku 4.5";
+  if (modelId.includes("sonnet")) return "Claude Sonnet 4.6";
+  if (modelId.includes("opus")) return "Claude Opus 4.6";
+  return modelId;
 }
 
 export function deactivate(): void {
