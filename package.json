@@ -2,7 +2,7 @@
   "name": "cdd-for-claude-code",
   "displayName": "CDD for Claude Code — Copilot Driven Dev",
   "description": "Visual explorer and AI agent for CDD (Copilot-Driven Development) methodology. Manage modules, skills, rules, and stacks for Claude Code projects.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "danilorangelmg",
   "license": "MIT",
   "icon": "resources/cdd-icon.png",
