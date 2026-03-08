@@ -1,0 +1,162 @@
+{
+  "name": "cdd-for-claude-code",
+  "displayName": "CDD for Claude Code — Copilot Driven Dev",
+  "description": "Visual explorer and AI agent for CDD (Copilot-Driven Development) methodology. Manage modules, skills, rules, and stacks for Claude Code projects.",
+  "version": "0.1.0",
+  "publisher": "danilorangelmg",
+  "license": "MIT",
+  "icon": "resources/cdd-icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/danilorangelmg/cdd-kit-vscode"
+  },
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "categories": [
+    "Other",
+    "Machine Learning"
+  ],
+  "keywords": [
+    "claude-code",
+    "copilot-driven-development",
+    "cdd",
+    "ai-development",
+    "methodology",
+    "multi-agent"
+  ],
+  "activationEvents": [
+    "workspaceContains:cdd.json"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "cdd-explorer",
+          "title": "CDD",
+          "icon": "resources/icons/cdd-activity.svg"
+        }
+      ]
+    },
+    "views": {
+      "cdd-explorer": [
+        {
+          "id": "cddModules",
+          "name": "Modules & Skills"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "cdd.initProject",
+        "title": "CDD: Init Project",
+        "icon": "$(add)"
+      },
+      {
+        "command": "cdd.addModule",
+        "title": "CDD: Add Module",
+        "icon": "$(add)"
+      },
+      {
+        "command": "cdd.addStack",
+        "title": "CDD: Add/Change Stack",
+        "icon": "$(symbol-property)"
+      },
+      {
+        "command": "cdd.runDoctor",
+        "title": "CDD: Run Doctor",
+        "icon": "$(heart)"
+      },
+      {
+        "command": "cdd.regenerate",
+        "title": "CDD: Regenerate Infrastructure",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "cdd.askAgent",
+        "title": "CDD: Ask CDD Agent",
+        "icon": "$(comment-discussion)"
+      },
+      {
+        "command": "cdd.loginAnthropic",
+        "title": "CDD: Login Anthropic"
+      },
+      {
+        "command": "cdd.logoutAnthropic",
+        "title": "CDD: Logout Anthropic"
+      },
+      {
+        "command": "cdd.refreshTree",
+        "title": "Refresh",
+        "icon": "$(refresh)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "cdd.addModule",
+          "when": "view == cddModules",
+          "group": "navigation"
+        },
+        {
+          "command": "cdd.refreshTree",
+          "when": "view == cddModules",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "cdd.addStack",
+          "when": "view == cddModules && viewItem == module",
+          "group": "inline"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "CDD for Claude Code",
+      "properties": {
+        "cdd.anthropic.model": {
+          "type": "string",
+          "default": "claude-sonnet-4-6-20250414",
+          "enum": [
+            "claude-haiku-4-5-20251001",
+            "claude-sonnet-4-6-20250414",
+            "claude-opus-4-6-20250414"
+          ],
+          "enumDescriptions": [
+            "Claude Haiku 4.5 — Fast, lightweight",
+            "Claude Sonnet 4.6 — Balanced (recommended)",
+            "Claude Opus 4.6 — Most capable"
+          ],
+          "description": "Claude model to use for the CDD Agent"
+        },
+        "cdd.agent.maxTokens": {
+          "type": "number",
+          "default": 2048,
+          "description": "Maximum tokens for agent responses"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.js",
+    "watch": "node esbuild.js --watch",
+    "lint": "tsc --noEmit",
+    "package": "vsce package",
+    "publish": "vsce publish",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.52.0",
+    "cdd-kit": "^0.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.15",
+    "@types/vscode": "^1.74.0",
+    "@vscode/vsce": "^3.0.0",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.8.0",
+    "vitest": "^3.0.0"
+  }
+}
