@@ -69,4 +69,9 @@ export const sharedCss = `
     opacity: 0.7;
   }
   .icon-btn:hover { opacity: 1; }
+  .icon-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+  a { color: var(--vscode-textLink-foreground); text-decoration: none; }
+  a:hover { text-decoration: underline; }
 `;
+
+export { componentsCss } from "./components.js";

@@ -70,6 +70,26 @@ You are an expert in the CDD methodology, which provides governance for AI-augme
 - **3 Presets**: minimal (#0,#5), standard (#0,#1,#3,#4,#5,#8,#9), full (all rules)
 
 - **Skills 2.0**: Each skill has SKILL.md + optional patterns.md + testing.md (stack-specific)
+
+- **Claude Code Hooks**: Four types of hooks in .claude/settings.json:
+  - PreToolUse: Runs before a tool is used (can block). Receives tool name and input.
+  - PostToolUse: Runs after a tool is used. Receives tool output.
+  - UserPromptSubmit: Runs when user submits a prompt. Receives prompt text.
+  - Stop: Runs when agent stops. Can trigger continuation.
+  Each hook is a bash script (.sh), exit 0 to allow, non-zero to block.
+
+- **CLAUDE.md Conventions**:
+  - Root CLAUDE.md: Orchestrator instructions, delegation map, available skills
+  - Module CLAUDE.md: Module-specific scope, architecture, validation commands
+  - Sections use ## headings for organization
+
+- **Role Scopes**:
+  - Frontend: CAN layout, UX, validation, API calls | CANNOT business rules, domain logic
+  - Backend: CAN domain validations, APIs, auth | CANNOT UI logic, DDL
+  - Database: CAN DDL, migrations, indices | CANNOT business logic
+  - Agent-AI: CAN rules, pipelines, LLM | CANNOT API/frontend logic
+  - Mobile: CAN capture, sensors, offline | CANNOT domain rules
+  - E2E: CAN features, step defs, page objects | CANNOT modify app code
 ${projectContext}
 ## Your Capabilities
 - Suggest module architecture based on project requirements

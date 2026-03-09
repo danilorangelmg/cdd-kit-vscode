@@ -2,29 +2,14 @@ import * as vscode from "vscode";
 import { ConfigService } from "../services/configService";
 import { CddTreeProvider } from "../providers/CddTreeProvider";
 
-const PRESETS = [
+const PRESET_OPTIONS = [
   {
     label: "standard",
-    description: "(Recommended) Rules #0, #1, #3, #4, #5, #8, #9",
+    description: "(Recommended) Core + TDD + Feature Gate + Changelog",
   },
   { label: "minimal", description: "Rules #0, #5 only" },
   { label: "full", description: "All 10 rules enabled" },
 ];
-
-const PRESET_RULES: Record<string, Record<string, boolean>> = {
-  minimal: {
-    "0": true, "1": false, "2": false, "3": false, "4": false,
-    "5": true, "6": false, "7": false, "8": false, "9": false,
-  },
-  standard: {
-    "0": true, "1": true, "2": false, "3": true, "4": true,
-    "5": true, "6": false, "7": false, "8": true, "9": true,
-  },
-  full: {
-    "0": true, "1": true, "2": true, "3": true, "4": true,
-    "5": true, "6": true, "7": true, "8": true, "9": true,
-  },
-};
 
 export async function initProjectCommand(
   configService: ConfigService,
@@ -73,13 +58,28 @@ export async function initProjectCommand(
   if (!language) return;
 
   // 4. Preset
-  const preset = await vscode.window.showQuickPick(PRESETS, {
+  const preset = await vscode.window.showQuickPick(PRESET_OPTIONS, {
     title: "Methodology Preset",
     placeHolder: "Select governance preset",
   });
   if (!preset) return;
 
-  // 5. Create initial config
+  // 5. Get preset rules from cdd-kit (proper string IDs)
+  let presetRules: Record<string, boolean>;
+  try {
+    const cddKit = await import("cdd-kit/api");
+    const presetData = cddKit.getPresetById(preset.label);
+    if (presetData) {
+      presetRules = { ...presetData.rules };
+    } else {
+      // Fallback with proper IDs
+      presetRules = buildFallbackRules(preset.label);
+    }
+  } catch {
+    presetRules = buildFallbackRules(preset.label);
+  }
+
+  // 6. Create initial config
   const config = {
     version: "1.0.0",
     project: {
@@ -95,13 +95,13 @@ export async function initProjectCommand(
     }>,
     methodology: {
       preset: preset.label,
-      rules: PRESET_RULES[preset.label],
+      rules: presetRules,
     },
   };
 
   await configService.saveConfig(config as any);
 
-  // 6. Generate infrastructure
+  // 7. Generate infrastructure
   try {
     const cddKit = await import("cdd-kit/api");
     await cddKit.generateOrchestrator(workspaceRoot, config as any);
@@ -117,4 +117,34 @@ export async function initProjectCommand(
   vscode.window.showInformationMessage(
     `CDD project "${name}" initialized with ${preset.label} preset. Add modules with CDD: Add Module.`
   );
+}
+
+function buildFallbackRules(preset: string): Record<string, boolean> {
+  const allRules = [
+    "absolute-delegation", "changelog-by-date", "conditional-mermaid",
+    "feature-planning-gate", "api-response-contract", "scope-of-responsibility",
+    "e2e-test-protection", "post-dev-e2e-validation", "tdd-enforcement",
+    "tdd-sequential-enforcement",
+  ];
+  const rules: Record<string, boolean> = {};
+  for (const r of allRules) rules[r] = false;
+
+  rules["absolute-delegation"] = true;
+  rules["scope-of-responsibility"] = true;
+
+  if (preset === "standard" || preset === "full") {
+    rules["changelog-by-date"] = true;
+    rules["feature-planning-gate"] = true;
+    rules["api-response-contract"] = true;
+    rules["tdd-enforcement"] = true;
+    rules["tdd-sequential-enforcement"] = true;
+  }
+
+  if (preset === "full") {
+    rules["conditional-mermaid"] = true;
+    rules["e2e-test-protection"] = true;
+    rules["post-dev-e2e-validation"] = true;
+  }
+
+  return rules;
 }

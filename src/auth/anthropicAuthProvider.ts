@@ -39,9 +39,25 @@ export class AnthropicAuthProvider
   }
 
   async createSession(): Promise<vscode.AuthenticationSession> {
+    // Step 1: Offer to open Anthropic console
+    const action = await vscode.window.showInformationMessage(
+      "You need an Anthropic API key to use the CDD Agent.",
+      "I have a key",
+      "Get API Key"
+    );
+
+    if (action === "Get API Key") {
+      vscode.env.openExternal(
+        vscode.Uri.parse("https://console.anthropic.com/settings/keys")
+      );
+    } else if (!action) {
+      throw new Error("Login cancelled");
+    }
+
+    // Step 2: Input the key
     const apiKey = await vscode.window.showInputBox({
       title: "Anthropic API Key",
-      prompt: "Enter your Anthropic API key to enable the CDD Agent",
+      prompt: "Paste your Anthropic API key",
       placeHolder: "sk-ant-...",
       password: true,
       validateInput: (value) => {

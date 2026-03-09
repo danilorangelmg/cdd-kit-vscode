@@ -27,6 +27,42 @@ interface CddNode {
   ruleId?: string;
 }
 
+const CATEGORY_ICONS: Record<string, string> = {
+  core: "shield",
+  documentation: "book",
+  testing: "beaker",
+  quality: "verified",
+};
+
+let cachedRules: Array<{
+  id: string;
+  number: number;
+  name: string;
+  description: string;
+  category: string;
+  alwaysActive: boolean;
+  requires: string[];
+}> | null = null;
+
+async function loadRuleMetadata(): Promise<typeof cachedRules> {
+  if (cachedRules) return cachedRules;
+  try {
+    const cddKit = await import("cdd-kit/api");
+    cachedRules = cddKit.RULES.map((r: any) => ({
+      id: r.id,
+      number: r.number,
+      name: r.name,
+      description: r.description,
+      category: r.category,
+      alwaysActive: r.alwaysActive,
+      requires: r.requires || [],
+    }));
+  } catch {
+    cachedRules = null;
+  }
+  return cachedRules;
+}
+
 const ROLE_ICONS: Record<string, string> = {
   frontend: "browser",
   backend: "server",
@@ -252,6 +288,7 @@ export class CddTreeProvider implements vscode.TreeDataProvider<CddNode> {
               ? `+${supportingFiles.length} files`
               : undefined,
           iconId: "zap",
+          contextValue: "skill",
           children,
         });
       }
@@ -263,16 +300,44 @@ export class CddTreeProvider implements vscode.TreeDataProvider<CddNode> {
   }
 
   private buildRuleNodes(config: CddConfig): CddNode[] {
+    // Try to use cached metadata for richer display
+    // Also trigger async load for next refresh
+    loadRuleMetadata().then(() => {});
+
     return Object.entries(config.methodology.rules).map(
-      ([ruleId, isActive]) => ({
-        type: "rule" as NodeType,
-        label: `${ruleId}`,
-        description: isActive ? "enabled" : "disabled",
-        iconId: isActive ? "pass-filled" : "circle-large-outline",
-        contextValue: "rule",
-        ruleId,
-        tooltip: `Click toggle button to ${isActive ? "disable" : "enable"}`,
-      })
+      ([ruleId, isActive]) => {
+        const meta = cachedRules?.find((r) => r.id === ruleId);
+
+        const label = meta
+          ? `#${meta.number} ${meta.name}`
+          : ruleId;
+
+        const description = isActive ? "enabled" : "disabled";
+        const iconId = isActive ? "pass-filled" : "circle-large-outline";
+
+        // Check for missing dependencies
+        let tooltip = meta?.description || "";
+        if (meta && isActive) {
+          const missingDeps = meta.requires.filter(
+            (dep) => !config.methodology.rules[dep]
+          );
+          if (missingDeps.length > 0) {
+            tooltip += `\n⚠️ Requires: ${missingDeps.join(", ")}`;
+          }
+        }
+
+        return {
+          type: "rule" as NodeType,
+          label,
+          description,
+          iconId: meta && isActive
+            ? CATEGORY_ICONS[meta.category] || iconId
+            : iconId,
+          contextValue: "rule",
+          ruleId,
+          tooltip,
+        };
+      }
     );
   }
 

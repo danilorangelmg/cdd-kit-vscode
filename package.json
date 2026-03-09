@@ -2,7 +2,7 @@
   "name": "cdd-for-claude-code",
   "displayName": "CDD for Claude Code — Copilot Driven Dev",
   "description": "Visual explorer and AI agent for CDD (Copilot-Driven Development) methodology. Manage modules, skills, rules, and stacks for Claude Code projects.",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "publisher": "danilorangelmg",
   "license": "MIT",
   "icon": "resources/cdd-icon.png",
@@ -115,12 +115,32 @@
         "command": "cdd.createHook",
         "title": "CDD: Create Hook",
         "icon": "$(add)"
+      },
+      {
+        "command": "cdd.applyPreset",
+        "title": "CDD: Apply Preset",
+        "icon": "$(symbol-enum)"
+      },
+      {
+        "command": "cdd.editSkill",
+        "title": "CDD: Edit Skill",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "cdd.deleteSkill",
+        "title": "CDD: Delete Skill",
+        "icon": "$(trash)"
       }
     ],
     "menus": {
       "view/title": [
         {
           "command": "cdd.addModule",
+          "when": "view == cddExplorer",
+          "group": "navigation"
+        },
+        {
+          "command": "cdd.applyPreset",
           "when": "view == cddExplorer",
           "group": "navigation"
         },
@@ -150,6 +170,15 @@
           "command": "cdd.createHook",
           "when": "view == cddExplorer && viewItem == hooksCategory",
           "group": "inline"
+        },
+        {
+          "command": "cdd.editSkill",
+          "when": "view == cddExplorer && viewItem == skill",
+          "group": "inline"
+        },
+        {
+          "command": "cdd.deleteSkill",
+          "when": "view == cddExplorer && viewItem == skill"
         }
       ]
     },

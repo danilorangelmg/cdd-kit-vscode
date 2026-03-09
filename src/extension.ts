@@ -1,10 +1,13 @@
 import * as vscode from "vscode";
+import * as fs from "fs";
+import * as path from "path";
 import { ConfigService } from "./services/configService";
 import { CddTreeProvider } from "./providers/CddTreeProvider";
 import { CddAgentService } from "./services/cddAgentService";
 import { CddChatViewProvider } from "./providers/CddChatViewProvider";
 import { CddClaudeMdViewProvider } from "./providers/CddClaudeMdViewProvider";
 import { ClaudeMdService } from "./services/claudeMdService";
+import { SkillEditorProvider } from "./providers/SkillEditorProvider";
 import {
   AnthropicAuthProvider,
   getApiKey,
@@ -17,6 +20,7 @@ import { regenerateCommand } from "./commands/regenerate";
 import { toggleRuleCommand } from "./commands/toggleRule";
 import { createSkillCommand } from "./commands/createSkill";
 import { createHookCommand } from "./commands/createHook";
+import { applyPresetCommand } from "./commands/applyPreset";
 
 let projectStatusBar: vscode.StatusBarItem;
 let connectionStatusBar: vscode.StatusBarItem;
@@ -37,6 +41,9 @@ export async function activate(
     showCollapseAll: true,
   });
 
+  // Skill Editor (WebviewPanel)
+  const skillEditor = new SkillEditorProvider(configService, treeProvider);
+
   // WebviewView providers
   const chatViewProvider = new CddChatViewProvider(
     context,
@@ -54,7 +61,9 @@ export async function activate(
     vscode.window.registerWebviewViewProvider(
       "cddClaudeMd",
       claudeMdViewProvider
-    )
+    ),
+    claudeMdViewProvider, // Disposable for watcher cleanup
+    claudeMdService // Disposable for event emitter cleanup
   );
 
   // Status bar — Project info
@@ -98,7 +107,11 @@ export async function activate(
       vscode.commands.executeCommand("cddChat.focus")
     ),
     vscode.commands.registerCommand("cdd.toggleRule", (item) =>
-      toggleRuleCommand(item, configService, treeProvider)
+      toggleRuleCommand(
+        typeof item === "string" ? item : item?.ruleId,
+        configService,
+        treeProvider
+      )
     ),
     vscode.commands.registerCommand("cdd.createSkill", () =>
       createSkillCommand(configService, treeProvider)
@@ -106,6 +119,36 @@ export async function activate(
     vscode.commands.registerCommand("cdd.createHook", () =>
       createHookCommand(configService, treeProvider)
     ),
+    vscode.commands.registerCommand("cdd.applyPreset", () =>
+      applyPresetCommand(configService, treeProvider)
+    ),
+    vscode.commands.registerCommand("cdd.editSkill", (item) => {
+      const skillName = typeof item === "string" ? item : item?.label;
+      skillEditor.openSkillEditor(skillName);
+    }),
+    vscode.commands.registerCommand("cdd.deleteSkill", async (item) => {
+      const skillName = typeof item === "string" ? item : item?.label;
+      if (!skillName) return;
+
+      const root = configService.getWorkspaceRoot();
+      if (!root) return;
+
+      const confirm = await vscode.window.showWarningMessage(
+        `Delete skill "${skillName}"?`,
+        "Delete",
+        "Cancel"
+      );
+      if (confirm !== "Delete") return;
+
+      const skillDir = path.join(root, ".claude", "skills", skillName);
+      if (fs.existsSync(skillDir)) {
+        fs.rmSync(skillDir, { recursive: true });
+        treeProvider.refresh();
+        vscode.window.showInformationMessage(
+          `Skill "${skillName}" deleted.`
+        );
+      }
+    }),
     vscode.commands.registerCommand("cdd.loginAnthropic", async () => {
       try {
         const session = await vscode.authentication.getSession(

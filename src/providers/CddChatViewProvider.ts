@@ -44,6 +44,11 @@ export class CddChatViewProvider implements vscode.WebviewViewProvider {
             this.treeProvider
           );
           break;
+        case "openExternal":
+          if (message.url) {
+            vscode.env.openExternal(vscode.Uri.parse(message.url));
+          }
+          break;
       }
     });
   }
